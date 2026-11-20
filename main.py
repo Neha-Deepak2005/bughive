@@ -10,7 +10,11 @@ from sqlalchemy.orm import sessionmaker, declarative_base, Session
 import jwt
 from passlib.hash import pbkdf2_sha256
 
-DB = os.getenv("DATABASE_URL", "sqlite:///./app.db").replace("postgres://", "postgresql://", 1)
+DB = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+if DB.startswith("postgres://"):
+    DB = DB.replace("postgres://", "postgresql+psycopg2://", 1)
+elif DB.startswith("postgresql://"):
+    DB = DB.replace("postgresql://", "postgresql+psycopg2://", 1)
 SECRET = os.getenv("SECRET_KEY", "change-me-in-production")
 engine = create_engine(DB, connect_args={"check_same_thread": False} if DB.startswith("sqlite") else {})
 SessionLocal = sessionmaker(bind=engine)
