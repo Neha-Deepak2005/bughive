@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BugHive – Issue Tracker</title><link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐛</text></svg>">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-100 via-pink-100 to-teal-100 text-slate-800">
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useCallback}=React;
+const api=async(p,o={})=>{const t=localStorage.getItem('t');const fd=o.body instanceof FormData;
+ const r=await fetch('/api'+p,{...o,headers:{...(fd?{}:{'Content-Type':'application/json'}),...(t?{Authorization:'Bearer '+t}:{})},body:o.body&&!fd?JSON.stringify(o.body):o.body});
+ if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(typeof e.detail==='string'?e.detail:'Something went wrong')}return r.json()};
+const COLS=[['todo','📝 To Do','from-slate-400 to-slate-500'],['in_progress','🚀 In Progress','from-sky-400 to-indigo-500'],['review','🔍 Review','from-amber-400 to-orange-500'],['done','✅ Done','from-emerald-400 to-teal-500']];
+const PRI={low:'bg-emerald-100 text-emerald-700',medium:'bg-amber-100 text-amber-700',high:'bg-orange-100 text-orange-700',critical:'bg-rose-100 text-rose-700'};
+const TYPE={bug:'🐞',task:'🧩',feature:'✨'};
+const Btn=({c='from-indigo-500 to-pink-500',...p})=><button {...p} className={`px-4 py-2 rounded-xl text-white font-semibold shadow bg-gradient-to-r ${c} hover:scale-105 transition disabled:opacity-50 ${p.className||''}`}/>;
+const In=p=><input {...p} className={`w-full px-3 py-2 rounded-xl border border-white bg-white/80 focus:outline-none focus:ring-2 focus:ring-pink-400 ${p.className||''}`}/>;
+const Sel=({opts,...p})=><select {...p} className="px-3 py-2 rounded-xl bg-white/80 border border-white">{opts.map(o=>Array.isArray(o)?<option key={o[0]} value={o[0]}>{o[1]}</option>:<option key={o}>{o}</option>)}</select>;
+
+function Auth({onAuth}){const[m,setM]=useState('login');const[f,setF]=useState({name:'',email:'',password:''});const[err,setErr]=useState('');
+ const go=async()=>{try{const r=await api('/auth/'+m,{method:'POST',body:f});localStorage.setItem('t',r.access_token);localStorage.setItem('u',JSON.stringify(r.user));onAuth(r.user)}catch(e){setErr(e.message)}};
+ return <div className="min-h-screen grid place-items-center p-4"><div className="w-full max-w-sm bg-white/70 backdrop-blur rounded-3xl shadow-xl p-8 space-y-3">
+  <h1 className="text-4xl font-extrabold text-center bg-gradient-to-r from-indigo-600 via-pink-500 to-teal-500 bg-clip-text text-transparent">🐛 BugHive</h1>
+  <p className="text-center text-slate-500">Squash bugs. Ship faster.</p>
+  {m==='register'&&<In placeholder="Name" value={f.name} onChange={e=>setF({...f,name:e.target.value})}/>}
+  <In placeholder="Email" value={f.email} onChange={e=>setF({...f,email:e.target.value})}/>
+  <In type="password" placeholder="Password" value={f.password} onChange={e=>setF({...f,password:e.target.value})}/>
+  {err&&<p className="text-rose-600 text-sm">{err}</p>}
+  <Btn className="w-full" onClick={go}>{m==='login'?'Log in':'Create account'}</Btn>
+  <p className="text-center text-sm cursor-pointer text-indigo-600" onClick={()=>{setM(m==='login'?'register':'login');setErr('')}}>{m==='login'?'New here? Sign up':'Have an account? Log in'}</p></div></div>}
+
+function Projects({open}){const[ps,setPs]=useState([]);const[n,setN]=useState('');const[d,setD]=useState('');
+ const load=()=>api('/projects').then(setPs);useEffect(()=>{load()},[]);
+ const add=async()=>{if(!n)return;await api('/projects',{method:'POST',body:{name:n,description:d}});setN('');setD('');load()};
+ const g=['from-indigo-400 to-purple-500','from-pink-400 to-rose-500','from-teal-400 to-emerald-500','from-amber-400 to-orange-500','from-sky-400 to-blue-500'];
+ return <div><h2 className="text-2xl font-bold mb-4">Your projects</h2>
+  <div className="flex gap-2 mb-6 flex-wrap"><In className="max-w-xs" placeholder="New project name" value={n} onChange={e=>setN(e.target.value)}/><In className="max-w-xs" placeholder="Description" value={d} onChange={e=>setD(e.target.value)}/><Btn onClick={add}>+ Create</Btn></div>
+  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{ps.map((p,i)=><div key={p.id} onClick={()=>open(p)} className={`cursor-pointer rounded-2xl p-5 text-white shadow-lg bg-gradient-to-br ${g[i%5]} hover:-translate-y-1 transition`}>
+   <div className="text-xl font-bold">{p.name}</div><div className="opacity-90 text-sm">{p.description||'No description'}</div><span className="mt-3 inline-block text-xs bg-white/25 rounded-full px-2 py-1">{p.role}</span></div>)}
+   {!ps.length&&<p className="text-slate-500">No projects yet — create your first one!</p>}</div></div>}
+
+function Board({p,back,me}){const[ts,setTs]=useState([]);const[mem,setMem]=useState([]);const[fl,setFl]=useState({q:'',priority:'',type:'',assignee_id:''});const[sel,setSel]=useState(null);const[show,setShow]=useState(false);const[team,setTeam]=useState(false);const[err,setErr]=useState('');
+ const can=p.role!=='viewer';
+ const load=useCallback(()=>{const qs=new URLSearchParams(Object.entries(fl).filter(([,v])=>v)).toString();api(`/projects/${p.id}/tickets?${qs}`).then(setTs).catch(e=>setErr(e.message))},[fl,p.id]);
+ useEffect(()=>{const t=setTimeout(load,250);return()=>clearTimeout(t)},[load]);
+ useEffect(()=>{api(`/projects/${p.id}/members`).then(setMem)},[team]);
+ const who=id=>mem.find(m=>m.id===id)?.name;
+ const drop=async(e,s)=>{const id=+e.dataTransfer.getData('id');if(!can||!id)return;setTs(ts.map(t=>t.id===id?{...t,status:s}:t));try{await api('/tickets/'+id,{method:'PATCH',body:{status:s}})}catch(x){setErr(x.message);load()}};
+ return <div><div className="flex items-center gap-3 mb-4 flex-wrap"><button onClick={back} className="text-indigo-600 font-semibold">← Projects</button><h2 className="text-2xl font-bold">{p.name}</h2>
+  <div className="ml-auto flex gap-2">{can&&<Btn onClick={()=>setShow(true)}>+ New ticket</Btn>}<Btn c="from-teal-500 to-sky-500" onClick={()=>setTeam(true)}>👥 Team</Btn></div></div>
+  <div className="flex gap-2 mb-4 flex-wrap"><In className="max-w-xs" placeholder="🔎 Search tickets…" value={fl.q} onChange={e=>setFl({...fl,q:e.target.value})}/>
+   <Sel value={fl.priority} onChange={e=>setFl({...fl,priority:e.target.value})} opts={[['','Any priority'],'low','medium','high','critical']}/>
+   <Sel value={fl.type} onChange={e=>setFl({...fl,type:e.target.value})} opts={[['','Any type'],'bug','task','feature']}/>
+   <Sel value={fl.assignee_id} onChange={e=>setFl({...fl,assignee_id:e.target.value})} opts={[['','Anyone'],...mem.map(m=>[m.id,m.name])]}/></div>
+  {err&&<p className="text-rose-600 mb-2">{err}</p>}
+  <div className="grid md:grid-cols-4 gap-4">{COLS.map(([s,l,g])=><div key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>drop(e,s)} className="bg-white/50 rounded-2xl p-3 min-h-[300px]">
+   <div className={`text-white font-bold rounded-xl px-3 py-2 mb-3 bg-gradient-to-r ${g}`}>{l} <span className="opacity-80">({ts.filter(t=>t.status===s).length})</span></div>
+   <div className="space-y-3">{ts.filter(t=>t.status===s).map(t=><div key={t.id} draggable={can} onDragStart={e=>e.dataTransfer.setData('id',t.id)} onClick={()=>setSel(t)} className="bg-white rounded-xl p-3 shadow cursor-pointer hover:shadow-lg border-l-4 border-pink-400">
+    <div className="font-semibold">{TYPE[t.type]} {t.title}</div><div className="flex items-center gap-2 mt-2 text-xs"><span className={`px-2 py-0.5 rounded-full ${PRI[t.priority]}`}>{t.priority}</span><span className="text-slate-500 ml-auto">{who(t.assignee_id)||'Unassigned'}</span></div></div>)}</div></div>)}</div>
+  {show&&<NewTicket p={p} mem={mem} close={()=>{setShow(false);load()}}/>}
+  {sel&&<Ticket t={sel} mem={mem} me={me} role={p.role} close={()=>{setSel(null);load()}}/>}
+  {team&&<Team p={p} mem={mem} close={()=>setTeam(false)}/>}</div>}
+
+const Modal=({close,children})=><div className="fixed inset-0 bg-slate-900/40 grid place-items-center p-4 z-10 overflow-auto" onClick={close}><div onClick={e=>e.stopPropagation()} className="bg-white rounded-3xl p-6 w-full max-w-lg space-y-3 shadow-2xl my-8">{children}</div></div>;
+
+function NewTicket({p,mem,close}){const[f,setF]=useState({title:'',description:'',type:'bug',priority:'medium',assignee_id:''});const[err,setErr]=useState('');const u=k=>e=>setF({...f,[k]:e.target.value});
+ const go=async()=>{try{await api(`/projects/${p.id}/tickets`,{method:'POST',body:{...f,assignee_id:f.assignee_id?+f.assignee_id:null}});close()}catch(e){setErr(e.message)}};
+ return <Modal close={close}><h3 className="text-xl font-bold">New ticket</h3><In placeholder="Title" value={f.title} onChange={u('title')}/>
+  <textarea className="w-full px-3 py-2 rounded-xl border bg-slate-50" rows="3" placeholder="Describe the issue…" value={f.description} onChange={u('description')}/>
+  <div className="flex gap-2 flex-wrap"><Sel value={f.type} onChange={u('type')} opts={['bug','task','feature']}/><Sel value={f.priority} onChange={u('priority')} opts={['low','medium','high','critical']}/>
+  <Sel value={f.assignee_id} onChange={u('assignee_id')} opts={[['','Unassigned'],...mem.map(m=>[m.id,m.name])]}/></div>{err&&<p className="text-rose-600 text-sm">{err}</p>}<Btn onClick={go}>Create</Btn></Modal>}
+
+function Ticket({t,mem,me,role,close}){const[cs,setCs]=useState([]);const[at,setAt]=useState([]);const[b,setB]=useState('');const[re,setRe]=useState(null);const[tt,setTt]=useState(t);const[err,setErr]=useState('');
+ const can=role!=='viewer';const load=()=>{api(`/tickets/${t.id}/comments`).then(setCs);api(`/tickets/${t.id}/attachments`).then(setAt)};useEffect(load,[]);
+ const patch=async d=>{try{setTt(await api('/tickets/'+t.id,{method:'PATCH',body:d}))}catch(e){setErr(e.message)}};
+ const send=async()=>{if(!b)return;try{await api(`/tickets/${t.id}/comments`,{method:'POST',body:{body:b,parent_id:re}});setB('');setRe(null);load()}catch(e){setErr(e.message)}};
+ const up=async e=>{const fd=new FormData();fd.append('file',e.target.files[0]);try{await api(`/tickets/${t.id}/attachments`,{method:'POST',body:fd});load()}catch(x){setErr(x.message)}};
+ const del=async()=>{if(!confirm('Delete this ticket?'))return;try{await api('/tickets/'+t.id,{method:'DELETE'});close()}catch(e){setErr(e.message)}};
+ const C=({c,d=0})=><div style={{marginLeft:d*16}}><div className="bg-indigo-50 rounded-xl p-2 mt-2 text-sm"><b>{c.user}</b> <span className="text-slate-400 text-xs">{new Date(c.created_at+'Z').toLocaleString()}</span><p>{c.body}</p>{can&&<button className="text-xs text-pink-600" onClick={()=>setRe(c.id)}>Reply</button>}</div>{cs.filter(x=>x.parent_id===c.id).map(x=><C key={x.id} c={x} d={d+1}/>)}</div>;
+ return <Modal close={close}><div className="flex items-start gap-2"><h3 className="text-xl font-bold flex-1">{TYPE[tt.type]} {tt.title}</h3><button onClick={close} className="text-2xl leading-none">×</button></div>
+  <p className="text-slate-600 whitespace-pre-wrap">{tt.description||'No description.'}</p>
+  <div className="flex gap-2 flex-wrap"><Sel disabled={!can} value={tt.status} onChange={e=>patch({status:e.target.value})} opts={COLS.map(c=>[c[0],c[1]])}/><Sel disabled={!can} value={tt.priority} onChange={e=>patch({priority:e.target.value})} opts={['low','medium','high','critical']}/>
+  <Sel disabled={!can} value={tt.assignee_id||''} onChange={e=>patch({assignee_id:+e.target.value||null})} opts={[['','Unassigned'],...mem.map(m=>[m.id,m.name])]}/></div>
+  <div><div className="font-semibold">📎 Screenshots</div><div className="flex gap-2 flex-wrap mt-1">{at.map(a=><a key={a.id} href={a.url} target="_blank"><img src={a.url} className="h-20 rounded-lg border"/></a>)}</div>{can&&<input type="file" accept="image/*" onChange={up} className="text-sm mt-2"/>}</div>
+  <div><div className="font-semibold">💬 Comments</div>{cs.filter(c=>!c.parent_id).map(c=><C key={c.id} c={c}/>)}
+  {can&&<div className="flex gap-2 mt-2"><In placeholder={re?'Replying…':'Add a comment'} value={b} onChange={e=>setB(e.target.value)}/><Btn onClick={send}>Send</Btn></div>}</div>
+  {err&&<p className="text-rose-600 text-sm">{err}</p>}{(role==='admin'||tt.reporter_id===me.id)&&<button onClick={del} className="text-rose-600 text-sm font-semibold">🗑 Delete ticket</button>}</Modal>}
+
+function Team({p,mem,close}){const[e,setE]=useState('');const[r,setR]=useState('developer');const[msg,setMsg]=useState('');
+ const add=async()=>{try{await api(`/projects/${p.id}/members`,{method:'POST',body:{email:e,role:r}});setMsg('Added ✅');setE('');close()}catch(x){setMsg(x.message)}};
+ return <Modal close={close}><h3 className="text-xl font-bold">👥 Team</h3>{mem.map(m=><div key={m.id} className="flex justify-between bg-pink-50 rounded-xl px-3 py-2"><span>{m.name} <span className="text-slate-400 text-sm">{m.email}</span></span><b className="text-indigo-600">{m.role}</b></div>)}
+  {p.role==='admin'&&<div className="flex gap-2 flex-wrap"><In placeholder="teammate@email.com" value={e} onChange={x=>setE(x.target.value)}/><Sel value={r} onChange={x=>setR(x.target.value)} opts={['admin','developer','viewer']}/><Btn onClick={add}>Add</Btn></div>}{msg&&<p className="text-sm">{msg}</p>}</Modal>}
+
+function App(){const[u,setU]=useState(()=>JSON.parse(localStorage.getItem('u')||'null'));const[p,setP]=useState(null);
+ if(!u)return <Auth onAuth={setU}/>;
+ return <div><header className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 text-white px-6 py-3 flex items-center shadow-lg"><span className="text-2xl font-extrabold">🐛 BugHive</span><span className="ml-auto mr-4">Hi, {u.name}</span>
+  <button className="bg-white/20 rounded-xl px-3 py-1" onClick={()=>{localStorage.clear();setU(null)}}>Logout</button></header>
+  <main className="max-w-7xl mx-auto p-4 md:p-6">{p?<Board p={p} me={u} back={()=>setP(null)}/>:<Projects open={setP}/>}</main></div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script></body></html>
